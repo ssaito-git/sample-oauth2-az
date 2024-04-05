@@ -1,48 +1,15 @@
+import { randomUUID } from 'crypto'
 import { Hono } from 'hono'
+import { setCookie } from 'hono/cookie'
 import { validator } from 'hono/validator'
 
 import { clients } from '../data/clients'
+import { AuthorizationRequest } from '../oauth2/authorizationRequest'
+import { createAuthorizationRequestErrorResponseUrl } from '../oauth2/util'
+import { authorizationRequestStore } from '../stores/authorizationRequestStore'
 import { Error } from '../views/Error'
 
 const authorizationRoute = new Hono()
-
-type AuthorizationRequest = {
-  responseType: string
-  clientId: string
-  redirectUri?: string
-  scope?: string[]
-  state?: string
-}
-
-type ErrorCode =
-  | 'invalid_request'
-  | 'unauthorized_client'
-  | 'access_denied'
-  | 'unsupported_response_type'
-  | 'invalid_scope'
-  | 'server_error'
-  | 'temporarily_unavailable'
-
-const createAuthorizationRequestErrorResponseUrl = (parameter: {
-  redirectUri: string
-  errorCode: ErrorCode
-  errorDescription?: string
-  errorUri?: string
-  state?: string
-}): string => {
-  const url = new URL(parameter.redirectUri)
-  url.searchParams.append('error', parameter.errorCode)
-  if (parameter.errorDescription !== undefined) {
-    url.searchParams.append('error_description', parameter.errorDescription)
-  }
-  if (parameter.errorUri !== undefined) {
-    url.searchParams.append('error_uri', parameter.errorUri)
-  }
-  if (parameter.state !== undefined) {
-    url.searchParams.append('state', parameter.state)
-  }
-  return url.toString()
-}
 
 authorizationRoute.get(
   '/auth',
@@ -114,9 +81,26 @@ authorizationRoute.get(
   }),
   async (c) => {
     const authorizationRequest = c.req.valid('query')
+
     console.log(authorizationRequest)
 
-    return c.text('test')
+    const expirationDuration = 60 * 10
+
+    const key = randomUUID()
+
+    authorizationRequestStore.set({
+      ...authorizationRequest,
+      key,
+      expires: Math.floor(Date.now() / 1000) + expirationDuration,
+    })
+
+    setCookie(c, 'authorization_request_key', key, {
+      httpOnly: true,
+      maxAge: expirationDuration,
+      sameSite: 'Lax',
+    })
+
+    return c.redirect('/login')
   },
 )
 
