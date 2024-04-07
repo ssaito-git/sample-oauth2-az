@@ -1,21 +1,19 @@
-import { randomUUID } from 'crypto'
 import { Hono } from 'hono'
-import { getCookie } from 'hono/cookie'
 import { validator } from 'hono/validator'
 
 import { users } from '../data/users'
-import { loginSessionStore } from '../stores/loginSessionStore'
+import { loginSession } from '../middleware/loginSession'
 import { Login } from '../views/Login'
 
 const loginRoute = new Hono()
 
-loginRoute.get('/login', (c) => {
-  const loginSessionId = getCookie(c, 'login_session')
-  const loginSession = loginSessionId
-    ? loginSessionStore.get(loginSessionId)
+loginRoute.get('/login', loginSession, (c) => {
+  const username = c.var.sessionData?.username
+  const user = username
+    ? users.find((user) => user.name === username)
     : undefined
 
-  if (loginSession !== undefined) {
+  if (user !== undefined) {
     return c.redirect('/consent')
   } else {
     return c.html(Login({}))
@@ -24,6 +22,7 @@ loginRoute.get('/login', (c) => {
 
 loginRoute.post(
   '/login',
+  loginSession,
   validator('form', (value, c) => {
     const username = value['username']
 
@@ -76,9 +75,7 @@ loginRoute.post(
       )
     }
 
-    const id = randomUUID()
-
-    loginSessionStore.set({ id, username: user.name, expires: 1 })
+    c.var.set({ username: user.name })
 
     return c.redirect('/consent')
   },
