@@ -1,4 +1,4 @@
-type ClientConfig = {
+export type ClientConfig = {
   id: string
   name: string
   secret: string

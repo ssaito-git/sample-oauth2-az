@@ -2,21 +2,24 @@ import { Hono } from 'hono'
 import { getCookie } from 'hono/cookie'
 import { validator } from 'hono/validator'
 
-import { clients } from '../data/clients'
-import { loginSession } from '../middleware/loginSession'
+import { ClientConfig, clients } from '../data/clients'
+import { users } from '../data/users'
+import { AuthorizationRequest } from '../oauth2/authorizationRequest'
 import { authorizationRequestStore } from '../stores/authorizationRequestStore'
 import { Consent } from '../views/Consent'
 import { Error } from '../views/Error'
 
 const consentRoute = new Hono()
 
-const authorizationRequestKeyValidator = validator('cookie', (value, c) => {
-  const authorizationRequestKey = getCookie(c, 'authorization_request_key')
-
-  if (!authorizationRequestKey) {
-    return c.html(Error({ message: '不正なリクエストです。' }))
-  }
-
+const validateAuthorizationRequest = (
+  authorizationRequestKey: string,
+):
+  | {
+      error: false
+      authorizationRequest: AuthorizationRequest
+      client: ClientConfig
+    }
+  | { error: true; message: string } => {
   const authorizationRequest = authorizationRequestStore.get(
     authorizationRequestKey,
   )
@@ -25,7 +28,7 @@ const authorizationRequestKeyValidator = validator('cookie', (value, c) => {
     authorizationRequest === undefined ||
     authorizationRequest.expires < Math.floor(Date.now() / 1000)
   ) {
-    return c.html(Error({ message: '不正なリクエストです。' }))
+    return { error: true, message: '不正なリクエストです。' }
   }
 
   const client = clients.find(
@@ -33,15 +36,14 @@ const authorizationRequestKeyValidator = validator('cookie', (value, c) => {
   )
 
   if (client === undefined) {
-    return c.html(Error({ message: '不正なリクエストです。' }))
+    return { error: true, message: '不正なリクエストです。' }
   }
 
-  return { authorizationRequestKey }
-})
+  return { error: false, authorizationRequest, client }
+}
 
 consentRoute.get(
   '/consent',
-  loginSession,
   validator('cookie', (_, c) => {
     const authorizationRequestKey = getCookie(c, 'authorization_request_key')
 
@@ -49,40 +51,35 @@ consentRoute.get(
       return c.html(Error({ message: '不正なリクエストです。' }))
     }
 
-    return { authorizationRequestKey }
+    const loginUser = getCookie(c, 'login_user')
+
+    if (!loginUser) {
+      return c.html(Error({ message: '不正なリクエストです。' }))
+    }
+
+    return { authorizationRequestKey, loginUser }
   }),
   (c) => {
-    const { authorizationRequestKey } = c.req.valid('cookie')
+    const { authorizationRequestKey, loginUser } = c.req.valid('cookie')
 
-    const authorizationRequest = authorizationRequestStore.get(
-      authorizationRequestKey,
-    )
+    const result = validateAuthorizationRequest(authorizationRequestKey)
 
-    if (
-      authorizationRequest === undefined ||
-      authorizationRequest.expires < Math.floor(Date.now() / 1000)
-    ) {
-      return c.html(Error({ message: '不正なリクエストです。' }))
+    if (result.error) {
+      return c.html(Error({ message: result.message }))
     }
 
-    const client = clients.find(
-      (client) => client.id === authorizationRequest.clientId,
-    )
+    const { authorizationRequest, client } = result
 
-    if (client === undefined) {
-      return c.html(Error({ message: '不正なリクエストです。' }))
-    }
+    const user = users.find((user) => user.name === loginUser)
 
-    const username = c.var.sessionData?.username
-
-    if (username === undefined) {
+    if (user === undefined) {
       return c.html(Error({ message: '不正なリクエストです。' }))
     }
 
     return c.html(
       Consent({
         clientNmae: client.name,
-        username,
+        username: user.name,
         scope: authorizationRequest.scope,
       }),
     )
@@ -98,7 +95,13 @@ consentRoute.post(
       return c.html(Error({ message: '不正なリクエストです。' }))
     }
 
-    return { authorizationRequestKey }
+    const loginUser = getCookie(c, 'login_user')
+
+    if (!loginUser) {
+      return c.html(Error({ message: '不正なリクエストです。' }))
+    }
+
+    return { authorizationRequestKey, loginUser }
   }),
   validator('form', (value, c) => {
     const action = value['action']
@@ -117,8 +120,32 @@ consentRoute.post(
     }
   }),
   (c) => {
-    const { authorizationRequestKey } = c.req.valid('cookie')
+    const { authorizationRequestKey, loginUser } = c.req.valid('cookie')
+
+    const result = validateAuthorizationRequest(authorizationRequestKey)
+
+    if (result.error) {
+      return c.html(Error({ message: result.message }))
+    }
+
+    const { authorizationRequest, client } = result
+
+    const user = users.find((user) => user.name === loginUser)
+
+    if (user === undefined) {
+      return c.html(Error({ message: '不正なリクエストです。' }))
+    }
+
     const { action } = c.req.valid('form')
+
+    switch (action) {
+      case 'ok':
+        break
+      case 'cancel':
+        break
+      default:
+        action satisfies never
+    }
   },
 )
 

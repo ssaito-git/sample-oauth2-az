@@ -1,16 +1,16 @@
 import { Hono } from 'hono'
+import { getCookie, setCookie } from 'hono/cookie'
 import { validator } from 'hono/validator'
 
 import { users } from '../data/users'
-import { loginSession } from '../middleware/loginSession'
 import { Login } from '../views/Login'
 
 const loginRoute = new Hono()
 
-loginRoute.get('/login', loginSession, (c) => {
-  const username = c.var.sessionData?.username
-  const user = username
-    ? users.find((user) => user.name === username)
+loginRoute.get('/login', (c) => {
+  const loginUser = getCookie(c, 'login_user')
+  const user = loginUser
+    ? users.find((user) => user.name === loginUser)
     : undefined
 
   if (user !== undefined) {
@@ -22,7 +22,6 @@ loginRoute.get('/login', loginSession, (c) => {
 
 loginRoute.post(
   '/login',
-  loginSession,
   validator('form', (value, c) => {
     const username = value['username']
 
@@ -37,19 +36,6 @@ loginRoute.post(
         Login({
           username,
           message: 'パスワードを入力してください。',
-        }),
-      )
-    }
-
-    const user = users.find(
-      (user) => user.name === username && user.password === password,
-    )
-
-    if (user == null) {
-      return c.html(
-        Login({
-          username,
-          message: 'ユーザー名またはパスワードに誤りがあります。',
         }),
       )
     }
@@ -75,7 +61,7 @@ loginRoute.post(
       )
     }
 
-    c.var.set({ username: user.name })
+    setCookie(c, 'login_user', username, { httpOnly: true, sameSite: 'Lax' })
 
     return c.redirect('/consent')
   },
