@@ -3,7 +3,7 @@ import { getCookie, setCookie } from 'hono/cookie'
 import { validator } from 'hono/validator'
 
 import { users } from '../data/users'
-import { Login } from '../views/Login'
+import { LoginView } from '../views/LoginView'
 
 const loginRoute = new Hono()
 
@@ -16,7 +16,7 @@ loginRoute.get('/login', (c) => {
   if (user !== undefined) {
     return c.redirect('/consent')
   } else {
-    return c.html(Login({}))
+    return c.html(LoginView({}))
   }
 })
 
@@ -26,14 +26,14 @@ loginRoute.post(
     const username = value['username']
 
     if (!username || typeof username !== 'string') {
-      return c.html(Login({ message: 'ユーザー名を入力してください。' }))
+      return c.html(LoginView({ message: 'ユーザー名を入力してください。' }))
     }
 
     const password = value['password']
 
     if (!password || typeof password !== 'string') {
       return c.html(
-        Login({
+        LoginView({
           username,
           message: 'パスワードを入力してください。',
         }),
@@ -54,7 +54,7 @@ loginRoute.post(
 
     if (user == null) {
       return c.html(
-        Login({
+        LoginView({
           username,
           message: 'ユーザー名またはパスワードに誤りがあります。',
         }),

@@ -5,7 +5,7 @@ type LoginProps = {
   message?: string
 }
 
-export const Login = ({ username, message }: LoginProps) => {
+export const LoginView = ({ username, message }: LoginProps) => {
   return (
     <MainLayout title="ログイン">
       <h1>ログイン</h1>

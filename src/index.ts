@@ -2,13 +2,13 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 
 import { routeTree } from './routes/routeTree'
-import { NotFound } from './views/NotFound'
+import { NotFoundView } from './views/NotFoundView'
 
 const app = new Hono()
 
 app.route('/', routeTree)
 app.notFound((c) => {
-  return c.html(NotFound())
+  return c.html(NotFoundView())
 })
 
 const port = 3000

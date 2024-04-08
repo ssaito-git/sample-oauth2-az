@@ -6,8 +6,8 @@ import { ClientConfig, clients } from '../data/clients'
 import { users } from '../data/users'
 import { AuthorizationRequest } from '../oauth2/authorizationRequest'
 import { authorizationRequestStore } from '../stores/authorizationRequestStore'
-import { Consent } from '../views/Consent'
-import { Error } from '../views/Error'
+import { ConsentView } from '../views/ConsentView'
+import { ErrorView } from '../views/ErrorView'
 
 const consentRoute = new Hono()
 
@@ -48,13 +48,13 @@ consentRoute.get(
     const authorizationRequestKey = getCookie(c, 'authorization_request_key')
 
     if (!authorizationRequestKey) {
-      return c.html(Error({ message: '不正なリクエストです。' }))
+      return c.html(ErrorView({ message: '認可リクエストが存在しません。' }))
     }
 
     const loginUser = getCookie(c, 'login_user')
 
     if (!loginUser) {
-      return c.html(Error({ message: '不正なリクエストです。' }))
+      return c.html(ErrorView({ message: '未ログインです。' }))
     }
 
     return { authorizationRequestKey, loginUser }
@@ -65,7 +65,7 @@ consentRoute.get(
     const result = validateAuthorizationRequest(authorizationRequestKey)
 
     if (result.error) {
-      return c.html(Error({ message: result.message }))
+      return c.html(ErrorView({ message: result.message }))
     }
 
     const { authorizationRequest, client } = result
@@ -73,11 +73,11 @@ consentRoute.get(
     const user = users.find((user) => user.name === loginUser)
 
     if (user === undefined) {
-      return c.html(Error({ message: '不正なリクエストです。' }))
+      return c.html(ErrorView({ message: '不正なリクエストです。' }))
     }
 
     return c.html(
-      Consent({
+      ConsentView({
         clientNmae: client.name,
         username: user.name,
         scope: authorizationRequest.scope,
@@ -92,13 +92,13 @@ consentRoute.post(
     const authorizationRequestKey = getCookie(c, 'authorization_request_key')
 
     if (!authorizationRequestKey) {
-      return c.html(Error({ message: '不正なリクエストです。' }))
+      return c.html(ErrorView({ message: '認可リクエストが存在しません。' }))
     }
 
     const loginUser = getCookie(c, 'login_user')
 
     if (!loginUser) {
-      return c.html(Error({ message: '不正なリクエストです。' }))
+      return c.html(ErrorView({ message: '未ログインです。' }))
     }
 
     return { authorizationRequestKey, loginUser }
@@ -107,16 +107,15 @@ consentRoute.post(
     const action = value['action']
 
     if (!action || typeof action !== 'string') {
-      return c.html(Error({ message: '不正なリクエストです。' }))
+      return c.html(ErrorView({ message: 'リクエストが不正です。' }))
     }
 
     switch (action) {
       case 'ok':
       case 'cancel':
         return { action }
-
       default:
-        return c.html(Error({ message: '不正なリクエストです。' }))
+        return c.html(ErrorView({ message: '不明なアクションです。' }))
     }
   }),
   (c) => {
@@ -125,7 +124,7 @@ consentRoute.post(
     const result = validateAuthorizationRequest(authorizationRequestKey)
 
     if (result.error) {
-      return c.html(Error({ message: result.message }))
+      return c.html(ErrorView({ message: result.message }))
     }
 
     const { authorizationRequest, client } = result
@@ -133,7 +132,7 @@ consentRoute.post(
     const user = users.find((user) => user.name === loginUser)
 
     if (user === undefined) {
-      return c.html(Error({ message: '不正なリクエストです。' }))
+      return c.html(ErrorView({ message: '未ログインです。' }))
     }
 
     const { action } = c.req.valid('form')
@@ -144,7 +143,7 @@ consentRoute.post(
       case 'cancel':
         break
       default:
-        action satisfies never
+        throw new Error(action satisfies never)
     }
   },
 )

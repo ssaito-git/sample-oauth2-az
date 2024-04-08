@@ -27,3 +27,5 @@ export const createAuthorizationRequestErrorResponseUrl = (parameter: {
   }
   return url.toString()
 }
+
+export const createAuthorizationRequestResponseUrl = () => {}

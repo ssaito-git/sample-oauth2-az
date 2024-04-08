@@ -6,7 +6,7 @@ type ConsentProps = {
   scope?: string[]
 }
 
-export const Consent = ({ clientNmae, username, scope }: ConsentProps) => {
+export const ConsentView = ({ clientNmae, username, scope }: ConsentProps) => {
   return (
     <MainLayout>
       <h1>Consent</h1>

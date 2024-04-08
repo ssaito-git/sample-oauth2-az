@@ -7,7 +7,7 @@ import { clients } from '../data/clients'
 import { AuthorizationRequest } from '../oauth2/authorizationRequest'
 import { createAuthorizationRequestErrorResponseUrl } from '../oauth2/util'
 import { authorizationRequestStore } from '../stores/authorizationRequestStore'
-import { Error } from '../views/Error'
+import { ErrorView } from '../views/ErrorView'
 
 const authorizationRoute = new Hono()
 
@@ -18,27 +18,29 @@ authorizationRoute.get(
 
     if (clientId === undefined) {
       return c.html(
-        Error({ message: 'client_id がパラメーターに含まれていません。' }),
+        ErrorView({ message: 'client_id がパラメーターに含まれていません。' }),
       )
     }
 
     const client = clients.find((client) => client.id === clientId)
 
     if (client === undefined) {
-      return c.html(Error({ message: 'クライアントが存在しません。' }))
+      return c.html(ErrorView({ message: 'クライアントが存在しません。' }))
     }
 
     const redirectUri = c.req.query('redirect_uri')
 
     if (redirectUri === undefined) {
       return c.html(
-        Error({ message: 'redirect_uri がパラメーターに含まれていません。' }),
+        ErrorView({
+          message: 'redirect_uri がパラメーターに含まれていません。',
+        }),
       )
     }
 
     if (!client.redirectUris.includes(redirectUri)) {
       return c.html(
-        Error({ message: 'リダイレクト URI が登録されていません。' }),
+        ErrorView({ message: 'リダイレクト URI が登録されていません。' }),
       )
     }
 

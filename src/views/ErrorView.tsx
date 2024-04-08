@@ -4,7 +4,7 @@ type ErrorProps = {
   message?: string
 }
 
-export const Error = ({ message }: ErrorProps) => {
+export const ErrorView = ({ message }: ErrorProps) => {
   return (
     <MainLayout>
       <h1>エラー</h1>
