@@ -5,7 +5,7 @@ import { validator } from 'hono/validator'
 
 import { clients } from '../data/clients'
 import { AuthorizationRequest } from '../oauth2/authorizationRequest'
-import { createAuthorizationRequestErrorResponseUrl } from '../oauth2/util'
+import { createAuthorizationRequestErrorResponseUrl } from '../oauth2/createAuthorizationRequestErrorResponseUrl'
 import { authorizationRequestStore } from '../stores/authorizationRequestStore'
 import { ErrorView } from '../views/ErrorView'
 
@@ -48,11 +48,23 @@ authorizationRoute.get(
 
     const responseType = c.req.query('response_type')
 
+    if (responseType === undefined) {
+      return c.redirect(
+        createAuthorizationRequestErrorResponseUrl({
+          redirectUri,
+          errorCode: 'invalid_request',
+          errorDescription: "'response_type' required.",
+          state,
+        }),
+      )
+    }
+
     if (responseType !== 'code') {
       return c.redirect(
         createAuthorizationRequestErrorResponseUrl({
           redirectUri,
           errorCode: 'invalid_request',
+          errorDescription: "'response_type' unknown value.",
           state,
         }),
       )
@@ -68,6 +80,7 @@ authorizationRoute.get(
         createAuthorizationRequestErrorResponseUrl({
           redirectUri,
           errorCode: 'invalid_scope',
+          errorDescription: "'scope' unknown value.",
           state,
         }),
       )
@@ -84,21 +97,15 @@ authorizationRoute.get(
   async (c) => {
     const authorizationRequest = c.req.valid('query')
 
-    console.log(authorizationRequest)
-
-    const expirationDuration = 60 * 10
-
     const key = randomUUID()
 
     authorizationRequestStore.set({
       ...authorizationRequest,
       key,
-      expires: Math.floor(Date.now() / 1000) + expirationDuration,
     })
 
     setCookie(c, 'authorization_request_key', key, {
       httpOnly: true,
-      maxAge: expirationDuration,
       sameSite: 'Lax',
     })
 

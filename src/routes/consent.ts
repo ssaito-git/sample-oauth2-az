@@ -1,34 +1,33 @@
+import { randomUUID } from 'crypto'
 import { Hono } from 'hono'
-import { getCookie } from 'hono/cookie'
+import { deleteCookie, getCookie } from 'hono/cookie'
 import { validator } from 'hono/validator'
 
-import { ClientConfig, clients } from '../data/clients'
+import { clients } from '../data/clients'
 import { users } from '../data/users'
-import { AuthorizationRequest } from '../oauth2/authorizationRequest'
+import { AuthorizationCode } from '../oauth2/authorizationCode'
+import { createAuthorizationRequestErrorResponseUrl } from '../oauth2/createAuthorizationRequestErrorResponseUrl'
+import { createAuthorizationResponseUrl } from '../oauth2/createAuthorizationResponseUrl'
+import { authorizationCodeStore } from '../stores/authorizationCodeStore'
 import { authorizationRequestStore } from '../stores/authorizationRequestStore'
 import { ConsentView } from '../views/ConsentView'
 import { ErrorView } from '../views/ErrorView'
 
 const consentRoute = new Hono()
 
-const validateAuthorizationRequest = (
-  authorizationRequestKey: string,
-):
-  | {
-      error: false
-      authorizationRequest: AuthorizationRequest
-      client: ClientConfig
-    }
-  | { error: true; message: string } => {
+const cookieValidator = validator('cookie', (_, c) => {
+  const authorizationRequestKey = getCookie(c, 'authorization_request_key')
+
+  if (!authorizationRequestKey) {
+    return c.html(ErrorView({ message: '認可リクエストが存在しません。' }))
+  }
+
   const authorizationRequest = authorizationRequestStore.get(
     authorizationRequestKey,
   )
 
-  if (
-    authorizationRequest === undefined ||
-    authorizationRequest.expires < Math.floor(Date.now() / 1000)
-  ) {
-    return { error: true, message: '不正なリクエストです。' }
+  if (authorizationRequest === undefined) {
+    return c.html(ErrorView({ message: '認可リクエストが存在しません。' }))
   }
 
   const client = clients.find(
@@ -36,73 +35,39 @@ const validateAuthorizationRequest = (
   )
 
   if (client === undefined) {
-    return { error: true, message: '不正なリクエストです。' }
+    return c.html(ErrorView({ message: 'クライアントが存在しません。' }))
   }
 
-  return { error: false, authorizationRequest, client }
-}
+  const loginUser = getCookie(c, 'login_user')
 
-consentRoute.get(
-  '/consent',
-  validator('cookie', (_, c) => {
-    const authorizationRequestKey = getCookie(c, 'authorization_request_key')
+  if (!loginUser) {
+    return c.html(ErrorView({ message: '未ログインです。' }))
+  }
 
-    if (!authorizationRequestKey) {
-      return c.html(ErrorView({ message: '認可リクエストが存在しません。' }))
-    }
+  const user = users.find((user) => user.name === loginUser)
 
-    const loginUser = getCookie(c, 'login_user')
+  if (user === undefined) {
+    return c.html(ErrorView({ message: '未ログインです。' }))
+  }
 
-    if (!loginUser) {
-      return c.html(ErrorView({ message: '未ログインです。' }))
-    }
+  return { authorizationRequest, user, client }
+})
 
-    return { authorizationRequestKey, loginUser }
-  }),
-  (c) => {
-    const { authorizationRequestKey, loginUser } = c.req.valid('cookie')
+consentRoute.get('/consent', cookieValidator, (c) => {
+  const { authorizationRequest, user, client } = c.req.valid('cookie')
 
-    const result = validateAuthorizationRequest(authorizationRequestKey)
-
-    if (result.error) {
-      return c.html(ErrorView({ message: result.message }))
-    }
-
-    const { authorizationRequest, client } = result
-
-    const user = users.find((user) => user.name === loginUser)
-
-    if (user === undefined) {
-      return c.html(ErrorView({ message: '不正なリクエストです。' }))
-    }
-
-    return c.html(
-      ConsentView({
-        clientNmae: client.name,
-        username: user.name,
-        scope: authorizationRequest.scope,
-      }),
-    )
-  },
-)
+  return c.html(
+    ConsentView({
+      clientNmae: client.name,
+      username: user.name,
+      scope: authorizationRequest.scope,
+    }),
+  )
+})
 
 consentRoute.post(
   '/consent',
-  validator('cookie', (_, c) => {
-    const authorizationRequestKey = getCookie(c, 'authorization_request_key')
-
-    if (!authorizationRequestKey) {
-      return c.html(ErrorView({ message: '認可リクエストが存在しません。' }))
-    }
-
-    const loginUser = getCookie(c, 'login_user')
-
-    if (!loginUser) {
-      return c.html(ErrorView({ message: '未ログインです。' }))
-    }
-
-    return { authorizationRequestKey, loginUser }
-  }),
+  cookieValidator,
   validator('form', (value, c) => {
     const action = value['action']
 
@@ -111,37 +76,47 @@ consentRoute.post(
     }
 
     switch (action) {
-      case 'ok':
+      case 'accept':
       case 'cancel':
-        return { action }
+        return action
       default:
         return c.html(ErrorView({ message: '不明なアクションです。' }))
     }
   }),
   (c) => {
-    const { authorizationRequestKey, loginUser } = c.req.valid('cookie')
+    const { authorizationRequest, user } = c.req.valid('cookie')
+    const action = c.req.valid('form')
 
-    const result = validateAuthorizationRequest(authorizationRequestKey)
-
-    if (result.error) {
-      return c.html(ErrorView({ message: result.message }))
-    }
-
-    const { authorizationRequest, client } = result
-
-    const user = users.find((user) => user.name === loginUser)
-
-    if (user === undefined) {
-      return c.html(ErrorView({ message: '未ログインです。' }))
-    }
-
-    const { action } = c.req.valid('form')
+    authorizationRequestStore.delete(authorizationRequest.key)
+    deleteCookie(c, 'authorization_request_key')
 
     switch (action) {
-      case 'ok':
-        break
-      case 'cancel':
-        break
+      case 'accept': {
+        const authorizationCode: AuthorizationCode = {
+          code: randomUUID(),
+          subject: user.name,
+          authorizationRequest,
+        }
+
+        authorizationCodeStore.set(authorizationCode)
+
+        return c.redirect(
+          createAuthorizationResponseUrl({
+            redirectUri: authorizationRequest.redirectUri,
+            code: authorizationCode.code,
+            state: authorizationRequest.state,
+          }),
+        )
+      }
+      case 'cancel': {
+        return c.redirect(
+          createAuthorizationRequestErrorResponseUrl({
+            redirectUri: authorizationRequest.redirectUri,
+            errorCode: 'access_denied',
+            state: authorizationRequest.state,
+          }),
+        )
+      }
       default:
         throw new Error(action satisfies never)
     }

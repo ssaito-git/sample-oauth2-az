@@ -13,11 +13,11 @@ export const ConsentView = ({ clientNmae, username, scope }: ConsentProps) => {
       {clientNmae}
       {username}
       {scope && (
-        <li>
+        <ul>
           {scope.map((value) => (
-            <ul>{value}</ul>
+            <li>{value}</li>
           ))}
-        </li>
+        </ul>
       )}
       <form method="post">
         <button type="submit" name="action" value="cancel">

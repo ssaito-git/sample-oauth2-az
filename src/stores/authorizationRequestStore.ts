@@ -2,7 +2,6 @@ import { AuthorizationRequest } from '../oauth2/authorizationRequest'
 
 type AuthorizationRequestData = AuthorizationRequest & {
   key: string
-  expires: number
 }
 
 class AuthorizationRequestStore {

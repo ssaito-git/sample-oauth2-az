@@ -14,7 +14,7 @@ loginRoute.get('/login', (c) => {
     : undefined
 
   if (user !== undefined) {
-    return c.redirect('/consent')
+    return c.redirect('/user')
   } else {
     return c.html(LoginView({}))
   }
