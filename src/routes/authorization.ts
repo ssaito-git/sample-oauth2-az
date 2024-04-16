@@ -11,106 +11,115 @@ import { ErrorView } from '../views/ErrorView'
 
 const authorizationRoute = new Hono()
 
-authorizationRoute.get(
-  '/auth',
-  validator('query', (_, c) => {
-    const clientId = c.req.query('client_id')
+/**
+ * 認可リクエストのバリデーター
+ */
+const authorizationRequestValidator = validator('query', (_, c) => {
+  // クライアント ID
+  const clientId = c.req.query('client_id')
 
-    if (clientId === undefined) {
-      return c.html(
-        ErrorView({ message: 'client_id がパラメーターに含まれていません。' }),
-      )
-    }
+  if (clientId === undefined) {
+    return c.html(
+      ErrorView({ message: 'client_id がパラメーターに含まれていません。' }),
+    )
+  }
 
-    const client = clients.find((client) => client.id === clientId)
+  const client = clients.find((client) => client.id === clientId)
 
-    if (client === undefined) {
-      return c.html(ErrorView({ message: 'クライアントが存在しません。' }))
-    }
+  if (client === undefined) {
+    return c.html(ErrorView({ message: 'クライアントが存在しません。' }))
+  }
 
-    const redirectUri = c.req.query('redirect_uri')
+  // リダイレクト URI
+  const redirectUri = c.req.query('redirect_uri')
 
-    if (redirectUri === undefined) {
-      return c.html(
-        ErrorView({
-          message: 'redirect_uri がパラメーターに含まれていません。',
-        }),
-      )
-    }
+  if (redirectUri === undefined) {
+    return c.html(
+      ErrorView({
+        message: 'redirect_uri がパラメーターに含まれていません。',
+      }),
+    )
+  }
 
-    if (!client.redirectUris.includes(redirectUri)) {
-      return c.html(
-        ErrorView({ message: 'リダイレクト URI が登録されていません。' }),
-      )
-    }
+  if (!client.redirectUris.includes(redirectUri)) {
+    return c.html(
+      ErrorView({ message: 'リダイレクト URI が登録されていません。' }),
+    )
+  }
 
-    const state = c.req.query('state')
+  // ステート
+  const state = c.req.query('state')
 
-    const responseType = c.req.query('response_type')
+  // レスポンスタイプ
+  const responseType = c.req.query('response_type')
 
-    if (responseType === undefined) {
-      return c.redirect(
-        createAuthorizationRequestErrorResponseUrl({
-          redirectUri,
-          errorCode: 'invalid_request',
-          errorDescription: "'response_type' required.",
-          state,
-        }),
-      )
-    }
+  if (responseType === undefined) {
+    return c.redirect(
+      createAuthorizationRequestErrorResponseUrl({
+        redirectUri,
+        errorCode: 'invalid_request',
+        errorDescription: "'response_type' required.",
+        state,
+      }),
+    )
+  }
 
-    if (responseType !== 'code') {
-      return c.redirect(
-        createAuthorizationRequestErrorResponseUrl({
-          redirectUri,
-          errorCode: 'invalid_request',
-          errorDescription: "'response_type' unknown value.",
-          state,
-        }),
-      )
-    }
+  if (responseType !== 'code') {
+    return c.redirect(
+      createAuthorizationRequestErrorResponseUrl({
+        redirectUri,
+        errorCode: 'invalid_request',
+        errorDescription: "'response_type' unknown value.",
+        state,
+      }),
+    )
+  }
 
-    const scope = c.req.query('scope')?.split(' ')
+  // スコープ
+  const scope = c.req.query('scope')?.split(' ')
 
-    if (
-      scope !== undefined &&
-      !scope.every((value) => client.scope.includes(value))
-    ) {
-      return c.redirect(
-        createAuthorizationRequestErrorResponseUrl({
-          redirectUri,
-          errorCode: 'invalid_scope',
-          errorDescription: "'scope' unknown value.",
-          state,
-        }),
-      )
-    }
+  if (
+    scope !== undefined &&
+    !scope.every((value) => client.scope.includes(value))
+  ) {
+    return c.redirect(
+      createAuthorizationRequestErrorResponseUrl({
+        redirectUri,
+        errorCode: 'invalid_scope',
+        errorDescription: "'scope' unknown value.",
+        state,
+      }),
+    )
+  }
 
-    return {
-      clientId,
-      redirectUri,
-      responseType,
-      scope,
-      state,
-    } satisfies AuthorizationRequest
-  }),
-  async (c) => {
-    const authorizationRequest = c.req.valid('query')
+  return {
+    clientId,
+    redirectUri,
+    responseType,
+    scope,
+    state,
+  } satisfies AuthorizationRequest
+})
 
-    const key = randomUUID()
+/**
+ * 認可エンドポイント
+ */
+authorizationRoute.get('/auth', authorizationRequestValidator, async (c) => {
+  const authorizationRequest = c.req.valid('query')
 
-    authorizationRequestStore.set({
-      ...authorizationRequest,
-      key,
-    })
+  const key = randomUUID()
 
-    setCookie(c, 'authorization_request_key', key, {
-      httpOnly: true,
-      sameSite: 'Lax',
-    })
+  authorizationRequestStore.set({
+    ...authorizationRequest,
+    key,
+  })
 
-    return c.redirect('/login')
-  },
-)
+  setCookie(c, 'authorization_request_key', key, {
+    httpOnly: true,
+    sameSite: 'Lax',
+  })
+
+  return c.redirect('/login')
+})
 
 export { authorizationRoute }
